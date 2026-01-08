@@ -9,7 +9,7 @@ using Eplan.EplApi.Base;
 using Eplan.EplApi.Gui;
 using Eplan.EplApi.Scripting;
 
-// Created by Mark Spratt
+// This script is provided free of charge by CD-S (Competence Development and Solutions e.U) and modified by Mark Spratt
 
 /* How to use this script:
  * 1. Copy this script into your EPLAN Scripts directory (e.g., C:\EPLAN\Scripts\)
