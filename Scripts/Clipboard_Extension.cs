@@ -27,7 +27,7 @@ public class ClipboardExtension
     #region Constants
     private const string CONTEXT_MENU_DIALOG = "Editor";
     private const string CONTEXT_MENU_NAME = "Ged";
-    private const string COMPANY_PREFIX = "JEUS"; // Change this to your company name or initials
+    private const string COMPANY_PREFIX = "xxx"; // Change this to your company name or initials
     private const string IMAGE_FORMAT = ".png";
     #endregion
 
