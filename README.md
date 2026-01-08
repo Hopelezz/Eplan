@@ -107,7 +107,7 @@ This project is open source and available under the [MIT License](LICENSE).
 ## 🆘 Support
 
 - **Issues**: Found a bug or have a suggestion? [Open an issue](https://github.com/Hopelezz/Eplan/issues)
-- **Discussions**: Questions or want to share ideas? Start a [discussion](https://github.com/Hopelezz/Eplan/discussions)
+- **Questions**: Have questions or want to share ideas? Open an issue with the question label
 - **Documentation**: Check the [Scripts README](Scripts/README.md) for detailed information
 
 ## 🌟 Acknowledgments
