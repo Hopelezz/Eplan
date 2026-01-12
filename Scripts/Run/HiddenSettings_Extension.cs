@@ -6,7 +6,7 @@ using Eplan.EplApi.Base;
 
 /* How to use this script:
  * 1. Copy this script into your EPLAN Scripts directory (e.g. C:\EPLAN\Scripts\)
- * 2. Open EPLAN and go to File -> Extras -> Interfaces -> Script: Load
+ * 2. Open EPLAN and go to File -> Extras -> Interfaces -> Script: Run
  * 3. Select the script "HiddenSettings_Extension.cs" in the file dialog and open
  * 4. Click "OK" in the Register Script Dialog if it's already registered (this will update the script)
  * 5. A confirmation message will appear once the script is loaded successfully
