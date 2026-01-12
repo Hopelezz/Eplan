@@ -7,6 +7,8 @@ using Eplan.EplApi.ApplicationFramework;
 using Eplan.EplApi.Scripting;
 using Eplan.EplApi.Gui;
 
+// Created by Mark Spratt
+
 public class ExportProjectPDF_Extension
 {
     #region Constants
