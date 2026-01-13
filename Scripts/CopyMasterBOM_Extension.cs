@@ -29,7 +29,7 @@ using Eplan.EplApi.Scripting;
 /// <summary>
 /// Extension to automate Master BOM copying and project information population
 /// </summary>
-public class MasterBOM_Extension
+public class CopyMasterBOM_Extension
 {
     #region Constants
     private const string TAB_NAME_EN = "Tools";
@@ -40,7 +40,7 @@ public class MasterBOM_Extension
     // Multiple common locations are used in case the Hard Drive letter or network path differs due to structural changes.
     private static readonly string[] MASTER_BOM_PATHS = {
         @"E:\Electrical Design Team\Form\Master BoM.xlsm",
-        @"\\name.intra\dfs01\Engineering\Electrical Design Team\Form\Master BoM.xlsm",
+        @"\\jensen-group.intra\jeusdfs01\Engineering\Electrical Design Team\Form\Master BoM.xlsm",
         // Add more possible locations here
     };
     
@@ -61,34 +61,71 @@ public class MasterBOM_Extension
     [DeclareRegister]
     public void Register()
     {
-        SetupRibbonInterface();
-        
-        MessageBox.Show(
-            "Master BOM Extension script has been loaded successfully!\n\n" +
-            "Features added:\n" +
-            "• Copy Master BOM to project DOC folder with automatic renaming\n" +
-            "• Extract project number from F#### format\n" +
-            "• Auto-populate BOM with project name, number, and editor name\n" +
-            "• Built-in progress indicator and file overwrite protection\n\n" +
-            "Find the 'Copy Master BOM' button in Tools > Scripts",
-            "Script Loaded",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information
-        );
+        try
+        {
+            // Small delay to ensure EPLAN is ready
+            System.Threading.Thread.Sleep(100);
+            
+            SetupRibbonInterface();
+            
+            MessageBox.Show(
+                "Master BOM Extension script has been loaded successfully!\n\n" +
+                "Features added:\n" +
+                "• Copy Master BOM to project DOC folder with automatic renaming\n" +
+                "• Extract project number from F#### format\n" +
+                "• Auto-populate BOM with project name, number, and editor name\n" +
+                "• Built-in progress indicator and file overwrite protection\n\n" +
+                "Find the 'Copy Master BOM' button in Tools > Scripts\n\n" +
+                "Note: If you're reloading this script, the previous button has been safely replaced.",
+                "Script Loaded",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                string.Format("Error during registration: {0}\n\nStack trace:\n{1}", ex.Message, ex.StackTrace),
+                "Registration Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
 
     [DeclareUnregister]
     public void UnRegister()
     {
-        RemoveRibbonInterface();
-        
-        MessageBox.Show(
-            "Master BOM Extension script removed successfully!\n\n" +
-            "The 'Copy Master BOM' button has been removed from the Tools tab.",
-            "Script Unloaded",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information
-        );
+        try
+        {
+            RemoveRibbonInterface();
+            
+            // Small delay to allow cleanup to complete
+            System.Threading.Thread.Sleep(50);
+            
+            MessageBox.Show(
+                "Master BOM Extension script removed successfully!\n\n" +
+                "The 'Copy Master BOM' button has been removed from Tools > Scripts.\n" +
+                "Other script buttons remain unaffected.",
+                "Script Unloaded",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
+        {
+            // During unregistration, we still want to show critical errors
+            // but we'll be less verbose to avoid interfering with shutdown
+            if (ex.Message.Contains("critical") || ex.Message.Contains("fatal"))
+            {
+                MessageBox.Show(
+                    string.Format("Critical error during unregistration: {0}", ex.Message),
+                    "Unregistration Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+            }
+        }
     }
     #endregion
 
@@ -109,32 +146,100 @@ public class MasterBOM_Extension
     /// </summary>
     private void SetupRibbonInterface()
     {
-        RibbonBar ribbonBar = new RibbonBar();
-
-        RibbonTab ribbonTab = ribbonBar.GetTab(GetTabName(), true);
-        if (ribbonTab == null)
+        try
         {
-            ribbonTab = ribbonBar.AddTab(GetTabName());
-        }
+            RibbonBar ribbonBar = new RibbonBar();
+            if (ribbonBar == null)
+            {
+                MessageBox.Show("Failed to create RibbonBar instance.", "Ribbon Error");
+                return;
+            }
 
-        RibbonCommandGroup ribbonCommandGroup = ribbonTab.AddCommandGroup(GROUP_NAME);
-        ribbonCommandGroup.AddCommand("Copy Master BOM", "CopyMasterBOMToProject", new RibbonIcon(CommandIcon.Application));
+            RibbonTab ribbonTab = ribbonBar.GetTab(GetTabName(), true);
+            if (ribbonTab == null)
+            {
+                ribbonTab = ribbonBar.AddTab(GetTabName());
+            }
+
+            if (ribbonTab == null)
+            {
+                MessageBox.Show("Failed to find or create Tools tab.", "Ribbon Error");
+                return;
+            }
+
+            RibbonCommandGroup ribbonCommandGroup = ribbonTab.GetCommandGroup(GROUP_NAME);
+            if (ribbonCommandGroup == null)
+            {
+                ribbonCommandGroup = ribbonTab.AddCommandGroup(GROUP_NAME);
+            }
+
+            if (ribbonCommandGroup == null)
+            {
+                MessageBox.Show("Failed to find or create Scripts group in Tools tab.", "Ribbon Error");
+                return;
+            }
+
+            // Check if our command already exists and remove it to prevent duplicates
+            try
+            {
+                foreach (var cmd in ribbonCommandGroup.Commands)
+                {
+                    if (cmd.Value.ActionCommandLine == "CopyMasterBOMToProject")
+                    {
+                        cmd.Value.Remove();
+                        break;
+                    }
+                }
+            }
+            catch
+            {
+                // Command didn't exist - this is fine
+            }
+
+            ribbonCommandGroup.AddCommand("Copy Master BOM", "CopyMasterBOMToProject", new RibbonIcon(CommandIcon.Application));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(string.Format("Ribbon setup error: {0}\n\nStack trace: {1}", ex.Message, ex.StackTrace), "Ribbon Setup Error");
+        }
     }
 
     /// <summary>
-    /// Removes the ribbon interface elements
+    /// Removes only this script's command from the ribbon interface
     /// </summary>
     private void RemoveRibbonInterface()
     {
-        RibbonBar ribbonBar = new RibbonBar();
-        RibbonTab ribbonTab = ribbonBar.GetTab(GetTabName(), true);
-        if (ribbonTab != null)
+        try
         {
+            RibbonBar ribbonBar = new RibbonBar();
+            if (ribbonBar == null) return;
+
+            RibbonTab ribbonTab = ribbonBar.GetTab(GetTabName(), true);
+            if (ribbonTab == null) return;
+
             RibbonCommandGroup ribbonCommandGroup = ribbonTab.GetCommandGroup(GROUP_NAME);
-            if (ribbonCommandGroup != null)
+            if (ribbonCommandGroup == null) return;
+
+            // Remove only our specific command, leave other scripts' commands intact
+            try
             {
-                ribbonCommandGroup.Remove();
+                foreach (var cmd in ribbonCommandGroup.Commands)
+                {
+                    if (cmd.Value.ActionCommandLine == "CopyMasterBOMToProject")
+                    {
+                        cmd.Value.Remove();
+                        break;
+                    }
+                }
             }
+            catch
+            {
+                // Command might not exist - this is fine during cleanup
+            }
+        }
+        catch
+        {
+            // Silent catch during unregistration to avoid interfering with EPLAN shutdown
         }
     }
     #endregion
