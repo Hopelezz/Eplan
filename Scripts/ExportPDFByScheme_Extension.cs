@@ -232,15 +232,69 @@ public class ExportProjectPDF_Extension
             }
 
             // Let user select one or more schemes
-            string[] schemes = new string[] { "Production", "Software", "Installation" };
+            string[] schemes = new string[] { "Default", "Production", "Software", "Installation", "Only Revision" };
             var selectedSchemes = PromptForSchemes(schemes);
             if (selectedSchemes == null || selectedSchemes.Length == 0)
                 return;
 
+            // Ask user if they want to generate reports before PDF export
+            DialogResult generateReportsResult = MessageBox.Show(
+                "Do you want to generate project reports before exporting the PDF?\n\n" +
+                "• Yes: Generate reports first, then export PDF\n" +
+                "• No: Export PDF only (faster)\n" +
+                "• Cancel: Cancel the operation",
+                "Generate Reports?",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Question);
+
+            if (generateReportsResult == DialogResult.Cancel)
+            {
+                return; // User cancelled the operation
+            }
+
+            if (generateReportsResult == DialogResult.Yes)
+            {
+                // Generate project reports before PDF export
+                bool reportsGenerated = GenerateProjectReports();
+                if (!reportsGenerated)
+                {
+                    DialogResult continueResult = MessageBox.Show(
+                        "Project reports generation failed or was cancelled.\n\nDo you want to continue with PDF export anyway?",
+                        "Reports Generation Issue",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+
+                    if (continueResult == DialogResult.No)
+                    {
+                        return;
+                    }
+                }
+            }
+
+            var generatedFiles = new System.Collections.Generic.List<string>();
+            string docPath = PathMap.SubstitutePath("$(DOC)");
             foreach (var schemeName in selectedSchemes)
             {
-                string pdfFileName = string.Format("{0} ({1}) {2}", projectName.Trim(), schemeName, revision.Trim());
-                ExportProjectToPDFByScheme(pdfFileName, schemeName);
+                bool isDefaultScheme = IsDefaultScheme(schemeName);
+                string pdfFileName = isDefaultScheme
+                    ? string.Format("{0} {1}", projectName.Trim(), revision.Trim())
+                    : string.Format("{0} ({1}) {2}", projectName.Trim(), schemeName, revision.Trim());
+                string fullFilePath = Path.Combine(docPath, pdfFileName) + ".pdf";
+                if (ExportProjectToPDFByScheme(pdfFileName, schemeName))
+                {
+                    if (File.Exists(fullFilePath))
+                        generatedFiles.Add(fullFilePath);
+                }
+            }
+
+            if (generatedFiles.Count > 0)
+            {
+                // Show a single completion dialog listing all files, with Copy to Clipboard button
+                ShowExportCompleteDialogMultiple(generatedFiles, docPath);
+            }
+            else
+            {
+                MessageBox.Show("No PDF files were generated.", "Export Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
         catch (Exception ex)
@@ -318,7 +372,13 @@ public class ExportProjectPDF_Extension
     /// <param name="fileName">The filename for the PDF (without .pdf extension)</param>
     /// <param name="schemeName">The name of the PDF scheme to use for export</param>
 
-    private void ExportProjectToPDFByScheme(string fileName, string schemeName)
+    private bool IsDefaultScheme(string schemeName)
+    {
+        return string.Equals(schemeName, "Default", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Returns true if export succeeded and file was created
+    private bool ExportProjectToPDFByScheme(string fileName, string schemeName)
     {
         try
         {
@@ -336,7 +396,7 @@ public class ExportProjectPDF_Extension
 
                 if (overwriteResult == DialogResult.No)
                 {
-                    return;
+                    return false;
                 }
 
                 try
@@ -346,7 +406,7 @@ public class ExportProjectPDF_Extension
                     if (File.Exists(fullFilePathWithExt))
                     {
                         MessageBox.Show("File deletion failed - file still exists. Export cancelled.", "Error");
-                        return;
+                        return false;
                     }
                 }
                 catch (Exception deleteEx)
@@ -356,7 +416,7 @@ public class ExportProjectPDF_Extension
                         "Delete Error",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Error);
-                    return;
+                    return false;
                 }
             }
 
@@ -369,14 +429,15 @@ public class ExportProjectPDF_Extension
             ActionCallingContext ctx = new ActionCallingContext();
             ctx.AddParameter("TYPE", "PDFPROJECTSCHEME");
             ctx.AddParameter("EXPORTFILE", fullFilePath);
-            ctx.AddParameter("EXPORTSCHEME", schemeName);
+            string exportScheme = IsDefaultScheme(schemeName) ? "EPLAN_default_value" : schemeName;
+            ctx.AddParameter("EXPORTSCHEME", exportScheme);
             cli.Execute("export", ctx);
 
             progress.EndPart(true);
 
             if (File.Exists(fullFilePathWithExt))
             {
-                ShowExportCompleteDialog(fileName, docPath, fullFilePathWithExt);
+                return true;
             }
             else
             {
@@ -386,6 +447,7 @@ public class ExportProjectPDF_Extension
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning
                 );
+                return false;
             }
         }
         catch (Exception ex)
@@ -396,8 +458,116 @@ public class ExportProjectPDF_Extension
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
+            return false;
         }
     }
+        /// <summary>
+        /// Shows a single export complete dialog for multiple files
+        /// </summary>
+        /// <param name="filePaths">List of generated PDF file paths</param>
+        /// <param name="docPath">The DOC folder path</param>
+        private void ShowExportCompleteDialogMultiple(System.Collections.Generic.List<string> filePaths, string docPath)
+        {
+            try
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Export Complete";
+                    dialog.Width = 520;
+                    dialog.Height = 260;
+                    dialog.StartPosition = FormStartPosition.CenterScreen;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.MaximizeBox = false;
+                    dialog.MinimizeBox = false;
+
+                    Label messageLabel = new Label();
+                    messageLabel.Text = "PDF export completed successfully!\n\nFiles:";
+                    messageLabel.Location = new System.Drawing.Point(20, 20);
+                    messageLabel.Width = 460;
+                    messageLabel.Height = 30;
+                    dialog.Controls.Add(messageLabel);
+
+                    ListBox listBox = new ListBox();
+                    listBox.Location = new System.Drawing.Point(20, 55);
+                    listBox.Width = 460;
+                    listBox.Height = 100;
+                    foreach (var file in filePaths)
+                        listBox.Items.Add(Path.GetFileName(file));
+                    dialog.Controls.Add(listBox);
+
+                    Label locationLabel = new Label();
+                    locationLabel.Text = "Location: " + docPath;
+                    locationLabel.Location = new System.Drawing.Point(20, 160);
+                    locationLabel.Width = 460;
+                    locationLabel.Height = 20;
+                    dialog.Controls.Add(locationLabel);
+
+                    Button openFolderButton = new Button();
+                    openFolderButton.Text = "Open Folder";
+                    openFolderButton.Location = new System.Drawing.Point(20, 190);
+                    openFolderButton.Width = 100;
+                    openFolderButton.Click += (sender, e) => {
+                        try
+                        {
+                            System.Diagnostics.Process.Start("explorer.exe", docPath);
+                        }
+                        catch (Exception folderEx)
+                        {
+                            MessageBox.Show(
+                                string.Format("Could not open folder: {0}", folderEx.Message),
+                                "Folder Open Error",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning
+                            );
+                        }
+                    };
+                    dialog.Controls.Add(openFolderButton);
+
+                    Button copyToClipboardButton = new Button();
+                    copyToClipboardButton.Text = "Copy to Clipboard";
+                    copyToClipboardButton.Location = new System.Drawing.Point(140, 190);
+                    copyToClipboardButton.Width = 120;
+                    copyToClipboardButton.Click += (sender, e) => {
+                        try
+                        {
+                            System.Collections.Specialized.StringCollection files = new System.Collections.Specialized.StringCollection();
+                            files.AddRange(filePaths.ToArray());
+                            Clipboard.SetFileDropList(files);
+                            MessageBox.Show("PDF files copied to clipboard!\n\nYou can now paste them into the contract folder.", "Copied to Clipboard", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                        catch (Exception clipboardEx)
+                        {
+                            MessageBox.Show(
+                                string.Format("Could not copy files to clipboard: {0}", clipboardEx.Message),
+                                "Clipboard Error",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning
+                            );
+                        }
+                    };
+                    dialog.Controls.Add(copyToClipboardButton);
+
+                    Button closeButton = new Button();
+                    closeButton.Text = "Close";
+                    closeButton.Location = new System.Drawing.Point(380, 190);
+                    closeButton.Width = 100;
+                    closeButton.DialogResult = DialogResult.OK;
+                    dialog.Controls.Add(closeButton);
+
+                    dialog.AcceptButton = closeButton;
+                    dialog.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    string.Format("Error showing export dialog: {0}", ex.Message),
+                    "Dialog Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
+        }
     #endregion
 
     #region Main Action Methods
